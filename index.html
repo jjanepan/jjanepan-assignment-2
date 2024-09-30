@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KMeans Visualization</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      body {
+        font-family: "Lucida Grande", sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f2f2f2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      header {
+        background-color: #004d99;
+        color: white;
+        padding: 10px 20px;
+        width: 100%;
+        text-align: center;
+      }
+      .container {
+        padding: 20px;
+        width: 80%;
+        max-width: 960px;
+      }
+      #plot {
+        width: 100%;
+        height: 500px;
+        background-color: #ffffff;
+        border: 3px solid #cccccc;
+      }
+      .controls {
+        text-align: center;
+        margin-top: 15px;
+      }
+      button {
+        background-color: #6699cc;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        margin: 5px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #3377aa;
+      }
+      select,
+      input {
+        padding: 8px;
+        margin: 5px;
+        border-radius: 5px;
+        border: 2px solid #cccccc;
+      }
+      .feedback {
+        color: #cc0000;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>KMeans Visualization</h1>
+    </header>
+    <div class="container">
+      <div id="plot"></div>
+      <div class="controls">
+        <button onclick="generateData()">Generate Data</button>
+        <select id="init-method">
+          <option value="random">Random</option>
+          <option value="farthest">Max Distance</option>
+          <option value="kmeans++">KMeans++</option>
+          <option value="manual">Manual</option>
+        </select>
+        <input type="number" id="num-clusters" value="3" min="1" max="10" />
+        <button onclick="initializeClusters()">Initialize</button>
+        <button onclick="nextStep()">Step</button>
+        <button onclick="completeClustering()">Finalize</button>
+        <button onclick="resetVisualization()">Reset</button>
+        <div class="feedback" id="feedback"></div>
+      </div>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+      let dataPoints = [],
+        centroids = [],
+        clusters = [];
+
+      async function generateData() {
+        const response = await fetch("/generate_data", { method: "POST" });
+        dataPoints = await response.json();
+        drawData();
+        document.getElementById("feedback").textContent =
+          "Data generated successfully.";
+      }
+
+      function drawData() {
+        const svg = d3.select("#plot").select("svg");
+        if (!svg.empty()) svg.remove();
+        const svgElement = d3
+          .select("#plot")
+          .append("svg")
+          .attr("width", "100%")
+          .attr("height", "100%");
+
+        const xExtent = d3.extent(dataPoints, (d) => d[0]);
+        const yExtent = d3.extent(dataPoints, (d) => d[1]);
+        const xScale = d3
+          .scaleLinear()
+          .domain(xExtent)
+          .range([0, parseInt(svgElement.style("width"))]);
+        const yScale = d3
+          .scaleLinear()
+          .domain(yExtent)
+          .range([0, parseInt(svgElement.style("height"))]);
+
+        svgElement
+          .selectAll("circle.data-point")
+          .data(dataPoints)
+          .enter()
+          .append("circle")
+          .attr("class", "data-point")
+          .attr("cx", (d) => xScale(d[0]))
+          .attr("cy", (d) => yScale(d[1]))
+          .attr("r", 5)
+          .style("fill", "#000");
+
+        if (centroids.length > 0) {
+          svgElement
+            .selectAll("rect.centroid")
+            .data(centroids)
+            .enter()
+            .append("rect")
+            .attr("class", "centroid")
+            .attr("x", (d) => xScale(d[0]) - 5)
+            .attr("y", (d) => yScale(d[1]) - 5)
+            .attr("width", 10)
+            .attr("height", 10)
+            .style("fill", "red");
+        }
+      }
+
+      async function initializeClusters() {
+        const method = document.getElementById("init-method").value;
+        const numClusters = parseInt(
+          document.getElementById("num-clusters").value
+        );
+        const response = await fetch("/initialize_kmeans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: dataPoints,
+            k: numClusters,
+            method: method,
+          }),
+        });
+        const result = await response.json();
+        centroids = result.centroids;
+        clusters = result.clusters;
+        drawData();
+        document.getElementById("feedback").textContent =
+          "Clusters initialized.";
+      }
+
+      async function nextStep() {
+        const response = await fetch("/step_kmeans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ centroids, clusters, dataPoints }),
+        });
+        const result = await response.json();
+        centroids = result.centroids;
+        clusters = result.clusters;
+        drawData();
+        document.getElementById("feedback").textContent = "Step completed.";
+      }
+
+      async function completeClustering() {
+        const response = await fetch("/finalize_kmeans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ centroids, clusters, dataPoints }),
+        });
+        const result = await response.json();
+        centroids = result.centroids;
+        clusters = result.clusters;
+        drawData();
+        document.getElementById("feedback").textContent =
+          "Clustering finalized.";
+      }
+
+      function resetVisualization() {
+        dataPoints = [];
+        centroids = [];
+        clusters = [];
+        drawData();
+        document.getElementById("feedback").textContent =
+          "Visualization reset.";
+      }
+    </script>
+  </body>
+</html>
